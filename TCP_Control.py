@@ -70,8 +70,8 @@ class Control_Server(Control):
 		self.client.send(codeword.encode())
 		self.client.send(s.encode())
 		
-	def initiateCountDown(self):
-		codeword = self._createcodeword(2)
+	def initiateCountDown(self,count):
+		codeword = self._createcodeword(2,count)
 		self._senddata(codeword)
 		
 		
@@ -104,7 +104,7 @@ class Control_Client(Control):
 			elif(code == 1):
 				self.__printText(params)
 			elif(code == 2):
-				self.__doCountdown()
+				self.__doCountdown(params[0])
 			else:
 				raise Exception("Control_Client(): Unknown code: {}".format(code))
 
@@ -122,8 +122,7 @@ class Control_Client(Control):
 	def __printText(self,params):
 		print( str(self._getdata(params[0])) ,end="")
 		
-	def __doCountdown(self):
-		count = 10
+	def __doCountdown(self,count=10):
 		print("Waiting for players")
 		print("Countdown: {:>2}".format(str(count)),end="\r")
 		mytime = tm.time()

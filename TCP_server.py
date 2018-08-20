@@ -22,36 +22,41 @@ def clientGame(control,svr_vars):
 	while(keepalive):
 		time.sleep(.1)
 		######## Player number incremented ##### Decrements to 0 later in loop
-		#svr_vars.numplayers+=1
-		svr_vars.incVar("numplayers",1)
+		svr_vars.numplayers+=1
+
 		
-		#while(svr_vars.numplayers<2):
-		#	time.sleep(.1)
-		while(svr_vars.getVar("numplayers")<2):
+		if(svr_vars.numplayers<2):
+			control.sendText("Waiting for at least one additional player...\n")
+		while(svr_vars.numplayers<2):
 			time.sleep(.1)
-	
-		#control.initiateCountDown()
 		
 		control.sendText("Alright, let's play!\nYou have {} seconds left in this game before the server reveals its number!\nInput a number between 1 and 100: ".format(svr_vars.timer))
+	
+		svr_vars.startgame=True  ####### START GAME
+		
 		response = control.sendInputRequestAndReceive()
 		while(response.isnumeric() == False or 1>int(response)>10 ):
 			control.sendText("\nHmm... the input is invalid. Remember, 1 to 10 only.\nInput a number between 1 and 10: ")
 			print(response)
 			response = control.sendInputRequestAndReceive()
 		control.sendText("Your number is: {}\n".format(int(response)))
-		servernumber = random.randint(1,10)
 		
-		#while(svr_vars.timer>0):
-		#	control.sendText("{} seconds until the server reveals its number!\r".format(svr_vars.timer))
-		#	time.sleep(.5)
-			
+		control.initiateCountDown(int(svr_vars.timer) if svr_vars.timer > 0 else 0)
+		while(svr_vars.timer>0):
+			time.sleep(svr_vars.timer-.5 if svr_vars.timer-.5>0 else 0.1)
 		
+		######### End game ### server_run automatically ends game
+		#svr_vars.startgame=False
+		svr_vars.numplayers-=1
+		##################
+		
+		servernumber = svr_vars.randomnum
 		control.sendText("The server's number is: {}\n".format(servernumber))
 		if(servernumber==int(response)):
 			control.sendText("YOU WIN!!!!!!\n")
 		
-		######### Player number decremented 
-		svr_vars-=1
+		 
+		
 		
 		control.sendText("Would you like to play again? (Y)es/(N)o: ")
 		response = control.sendInputRequestAndReceive()
@@ -62,21 +67,33 @@ def clientGame(control,svr_vars):
 	control.closeConnection()
 
 
+
+	
+
+def run_server(svr_vars):
+	svr_vars.randomnum = random.randint(1,100)
+	while(True):
+		if(svr_vars.startgame==True):
+			thistime=time.time()
+			while(svr_vars.timer>0):
+				lasttime = thistime
+				thistime=time.time()
+				svr_vars.timer-=thistime-lasttime
+				time.sleep(.2)
+			svr_vars.randomnum = random.randint(1,100)
+			svr_vars.startgame=False
+			svr_vars.timer=30
+
 close_server = False	
-	
-def getInputToClose():
-	global close_server
+def server_console():
 	while(True):
-		
-		print("Type 'Q' to close the server: ",end="")
-		u_in = input()
-		if(u_in[0]=='q' or u_in[0]=='Q'):
+		print("Press q to close server: ",end="")
+		user_in=input()
+		if(user_in=="q" or user_in=="Q"):
 			close_server=True
-	
-def serverGame(svr_vars):
-	while(True):
-		pass
-		
+			
+			
+'''	
 class SharedVars:
 		def __init__(self,**kwargs):
 			self.__kwargs=kwargs
@@ -102,16 +119,42 @@ class SharedVars:
 			self.__locks[varname].acquire()
 			self.__kwargs[varname].function(*args)
 			self.__locks[varname].release()
-
+'''
 
 class SharedVariables:
 	def __init__(self):
 		self.__numplayers=0
 		self.__numplayers_lock = threading.Lock()
-		self.__timer=20
+		self.__timer=30
 		self.__timer_lock = threading.Lock()
 		self.__numConnections = []
-		self.__numConnections = threading.Lock()
+		self.__numConnections_lock = threading.Lock()
+		self.__startgame = False
+		self.__startgame_lock = threading.Lock()
+		self.__randomnum = 0
+		self.__randomnum_lock = threading.Lock()
+	@property
+	def randomnum(self):
+		self.__randomnum_lock.acquire()
+		x=self.__randomnum
+		self.__randomnum_lock.release()
+		return x
+	@randomnum.setter
+	def randomnum(self,num):
+		self.__randomnum_lock.acquire()
+		self.__randomnum=num
+		self.__randomnum_lock.release()
+	@property
+	def startgame(self):
+		self.__startgame_lock.acquire()
+		x=self.__startgame
+		self.__startgame_lock.release()
+		return x
+	@startgame.setter
+	def startgame(self,num):
+		self.__startgame_lock.acquire()
+		self.__startgame=num
+		self.__startgame_lock.release()
 	@property
 	def numConnections(self):
 		self.__numConnections_lock.acquire()
@@ -146,26 +189,19 @@ class SharedVariables:
 		self.__numplayers=num
 		self.__numplayers_lock.release()
 		
-		
-def server_timer(svr_vars):
-	while(svr_vars.timer>0):
-		svr_vars.timer-=1
-		timer.sleep(1)
+
 
 
 #################### INITIALIZE SERVER ################		
 
-#svr_vars = SharedVariables()
-svr_vars = SharedVars(timer=20,numplayers=0)
+svr_vars = SharedVariables()
 
-#svr_vars.timer = 20
-#svr_vars.numplayers=0
-
-#timer=threading.Thread(target=server_timer,args=[svr_vars])
-
+server_timer = threading.Thread(target=run_server, args=[svr_vars])
+server_timer.daemon=True
+server_timer.start()
 
 server = socket.socket(socket.AF_INET,socket.SOCK_STREAM,0)
-host = socket.gethostname()
+host = "localhost"#socket.gethostname()
 port = 1337
 server.bind((host,port))
 server.listen()
@@ -176,7 +212,6 @@ while(True):
 	t.daemon = True
 	#threadList.append(t)
 	t.start()
-	print(close_server)
 	if(close_server==True):
 		break
 
