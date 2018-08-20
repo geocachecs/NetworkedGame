@@ -86,13 +86,23 @@ def run_server(svr_vars):
 
 close_server = False	
 def server_console():
+	global close_server
 	while(True):
 		print("Press q to close server: ",end="")
 		user_in=input()
 		if(user_in=="q" or user_in=="Q"):
+			print("bye")
 			close_server=True
+			exit(0)
 			
-			
+def getConnections(server,svr_vars):
+	while(True):
+		client,address = server.accept()
+		t = threading.Thread(target=clientGame, args=[Control_Server(client,server),svr_vars])
+		t.daemon = True
+		#threadList.append(t)
+		t.start()
+		
 '''	
 class SharedVars:
 		def __init__(self,**kwargs):
@@ -196,23 +206,27 @@ class SharedVariables:
 
 svr_vars = SharedVariables()
 
-server_timer = threading.Thread(target=run_server, args=[svr_vars])
-server_timer.daemon=True
-server_timer.start()
-
 server = socket.socket(socket.AF_INET,socket.SOCK_STREAM,0)
 host = "localhost"#socket.gethostname()
 port = 1337
 server.bind((host,port))
 server.listen()
 
+server_timer = threading.Thread(target=run_server, args=[svr_vars])
+server_timer.daemon=True
+server_timer.start()
+
+srvr_console = threading.Thread(target=server_console,args=[])
+srvr_console.daemon=True
+srvr_console.start()
+
+get_con = threading.Thread(target=getConnections,args=[server,svr_vars])
+get_con.daemon=True
+get_con.start()
+
 while(True):
-	client,address = server.accept()
-	t = threading.Thread(target=clientGame, args=[Control_Server(client,server),svr_vars])
-	t.daemon = True
-	#threadList.append(t)
-	t.start()
-	if(close_server==True):
+
+	if(close_server):
 		break
 
 exit()
